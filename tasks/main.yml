@@ -1,0 +1,26 @@
+---
+- include: preflight.yml
+  tags:
+    - loki_configure
+    - loki_install
+    - loki_run
+
+- include: install.yml
+  become: true
+  tags:
+    - loki_install
+
+- include: configure.yml
+  become: true
+  tags:
+    - loki_configure
+
+- name: ensure loki service is started and enabled
+  become: true
+  systemd:
+    daemon_reload: true
+    name: loki
+    state: started
+    enabled: true
+  tags:
+    - loki_run

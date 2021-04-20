@@ -1,0 +1,12 @@
+---
+- name: configure loki
+  template:
+    src: "loki.yml.j2"
+    dest: "{{ loki_config_dir }}/loki.yml"
+    force: true
+    owner: root
+    group: loki
+    mode: 0640
+    validate: "{{ _loki_binary_install_dir }}/loki --verify-config --config.file=%s"
+  notify:
+    - reload loki

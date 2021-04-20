@@ -1,0 +1,97 @@
+---
+- name: create loki system group
+  group:
+    name: loki
+    system: true
+    state: present
+
+- name: create loki system user
+  user:
+    name: loki
+    system: true
+    shell: "/usr/sbin/nologin"
+    group: loki
+    createhome: false
+    home: "{{ loki_db_dir }}"
+
+- name: create loki data directory
+  file:
+    path: "{{ loki_db_dir }}"
+    state: directory
+    owner: loki
+    group: loki
+    mode: 0755
+
+- name: create loki configuration directories
+  file:
+    path: "{{ item }}"
+    state: directory
+    owner: root
+    group: loki
+    mode: 0770
+  with_items:
+    - "{{ loki_config_dir }}"
+
+- block:
+    - name: download loki binary to local folder
+      become: false
+      get_url:
+        url: "https://github.com/grafana/loki/releases/download/v{{ loki_version }}/loki-linux-{{ go_arch }}.zip"
+        dest: "/tmp/loki-{{ loki_version }}.linux-{{ go_arch }}.zip"
+        checksum: "sha256:{{ __loki_checksum }}"
+      register: _download_archive
+      until: _download_archive is succeeded
+      retries: 5
+      delay: 2
+      # run_once: true # <-- this cannot be set due to multi-arch support
+      delegate_to: localhost
+      check_mode: false
+
+    - name: unpack loki binaries
+      become: false
+      unarchive:
+        src: "/tmp/loki-{{ loki_version }}.linux-{{ go_arch }}.zip"
+        dest: "/tmp/"
+        creates: "/tmp/loki-linux-{{ go_arch }}"
+      delegate_to: localhost
+      check_mode: false
+
+    - name: propagate official loki binary
+      copy:
+        src: "/tmp/{{ item }}-linux-{{ go_arch }}"
+        dest: "{{ _loki_binary_install_dir }}/{{ item }}"
+        mode: 0755
+        owner: root
+        group: root
+      with_items:
+        - loki
+      notify:
+        - restart loki
+  when:
+    - loki_binary_local_dir | length == 0
+    - not loki_skip_install
+
+- name: propagate locally distributed loki and promtool binaries
+  copy:
+    src: "{{ loki_binary_local_dir }}/{{ item }}"
+    dest: "{{ _loki_binary_install_dir }}/{{ item }}"
+    mode: 0755
+    owner: root
+    group: root
+  with_items:
+    - loki
+  when:
+    - loki_binary_local_dir | length > 0
+    - not loki_skip_install
+  notify:
+    - restart loki
+
+- name: create systemd service unit
+  template:
+    src: loki.service.j2
+    dest: /etc/systemd/system/loki.service
+    owner: root
+    group: root
+    mode: 0644
+  notify:
+    - restart loki

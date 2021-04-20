@@ -1,0 +1,13 @@
+---
+- name: restart loki
+  become: true
+  systemd:
+    daemon_reload: true
+    name: loki
+    state: restarted
+
+- name: reload loki
+  become: true
+  systemd:
+    name: loki
+    state: reloaded
